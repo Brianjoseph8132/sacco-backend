@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request
 from flask_migrate import Migrate
-from model import db, TokenBlocklist
+from models import db, TokenBlocklist
 from datetime import datetime
+from datetime import timedelta
 from flask_jwt_extended import JWTManager
 from flask_jwt_extended import create_access_token
 from flask_cors import CORS
@@ -27,6 +28,12 @@ jwt.init_app(app)
 # imports functions from views
 from views import *
 
+app.register_blueprint(loan_bp)
+app.register_blueprint(transaction_bp)
+app.register_blueprint(member_bp)
+app.register_blueprint(repayment_bp)
+app.register_blueprint(notification_bp)
+app.register_blueprint(account_bp)
 
 
 
