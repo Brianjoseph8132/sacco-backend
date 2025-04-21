@@ -9,25 +9,26 @@ db = SQLAlchemy(metadata=metadata)
 class Member(db.Model):
     __tablename__ = 'members'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     phone = db.Column(db.String(20))
     id_number = db.Column(db.String(20), unique=True)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(20), default='active')
     is_admin = db.Column(db.Boolean, default=False)
-    
+
     account = db.relationship('Account', backref='member', uselist=False, lazy=True)
-    loans = db.relationship('Loan', backref='member', lazy=True)
+
+    # Specify foreign_keys to resolve ambiguity
+    loans = db.relationship('Loan', foreign_keys='Loan.member_id', backref='borrower', lazy=True)
+    guaranteed_loans = db.relationship('Loan', foreign_keys='Loan.guarantor_id', backref='guarantor', lazy=True)
+    approved_loans = db.relationship('Loan', foreign_keys='Loan.approved_by', backref='approver', lazy=True)
 
     notifications_received = db.relationship('Notification', foreign_keys='Notification.recipient_id', backref='recipient', lazy=True)
     notifications_sent = db.relationship('Notification', foreign_keys='Notification.sender_id', backref='sender', lazy=True)
 
 
-    def set_id_number(self,id_number):
-        self.pin = generate_password_hash(id_number)
-
+    
 class Account(db.Model):
     __tablename__ = 'account'
     id = db.Column(db.Integer, primary_key=True)
