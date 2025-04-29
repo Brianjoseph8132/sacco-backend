@@ -1,4 +1,4 @@
-from models import Member,db
+from models import Member,db, Loan
 from flask import jsonify,request, Blueprint
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -24,10 +24,13 @@ def validate_kenyan_phone_number(phone):
 @member_bp.route("/members", methods=["POST"])
 def add_members():
     data = request.get_json()
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
     username = data.get('username')
     email = data.get('email')
     raw_password = data.get('password')
     phone = data.get('phone')
+    occupation = data.get('occupation')
     id_number = data.get("id_number")
     is_admin = data.get("is_admin", False)
 
@@ -60,10 +63,13 @@ def add_members():
 
     # Add new member to the database
     new_member = Member(
+        first_name=first_name,
+        last_name=last_name,
         username=username,
         email=email,
         password=password,
-        phone=phone,  # Store phone as it is, validated already
+        phone=phone, 
+        occupation=occupation,
         id_number=id_number,
         is_admin=is_admin
     )
@@ -72,9 +78,44 @@ def add_members():
     return jsonify({"success": "Member added successfully!"}), 200
 
 
+# Delete Member
+def has_unpaid_loans(member_id):
+    unpaid_loans = Loan.query.filter_by(member_id=member_id).filter(Loan.status != 'paid').all()
+    return len(unpaid_loans) > 0
 
-# Update User
-@member_bp.route("/update_member", methods=["PUT"])
-def update_member():
-    data = request.get_json()
+@member_bp.route('/delete_account/<int:member_id>', methods=['DELETE'])
+@jwt_required()
+def delete_account(member_id):
+    current_user_id = get_jwt_identity()
+
+    if member_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    member = Member.query.get(current_user_id)
+    if not member:
+        return jsonify({"error": "Member you are trying to delete doesn't exist"}), 404 
+
+    if has_unpaid_loans(current_user_id):
+        return jsonify({'error': 'Cannot delete account with unpaid loans'}), 400
+
+    # Optionally delete related account, transactions, etc.
+    db.session.delete(member)
+    db.session.commit()
+    return jsonify({'message': 'Account deleted successfully'}), 200
+
+
+# {
+#   "username": "Joseph Mwongela",
+#   "first_name": "Joseph",
+#   "last_name":"Mwongela",
+#   "email": "joseph@gmail.com",
+#   "password": "joseph12",
+#   "occupation": "Pilot",
+#   "phone": "+254756783492",
+#   "id_number": 567834218,
+#   "is_admin": false
+# }
+
+
+
     
