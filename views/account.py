@@ -78,3 +78,18 @@ def has_account():
 
     has_account = member.account is not None 
     return jsonify({"has_account": has_account}), 200
+
+
+
+
+# get the balance of the members account
+@account_bp.route("/balance", methods=["GET"])
+@jwt_required()
+def balance():
+    current_user_id = get_jwt_identity()
+    member = Member.query.get(current_user_id)
+
+    if not member or not member.account:
+        return jsonify({"error": "Unauthorized or No Account"}), 401
+
+    return jsonify({"balance": member.account.balance})
