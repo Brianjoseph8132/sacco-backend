@@ -4,17 +4,33 @@ from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask import request
 from decorator import admin_required
+from datetime import datetime
 
 admin_bp = Blueprint("admin_bp", __name__)
 
 
 
+def create_notification(recipient_id, message, type, loan_id=None, sender_id=None):
+    notif = Notification(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        message=message,
+        type=type,
+        loan_id=loan_id,
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(notif)
+    db.session.commit()
+
+
+
 @admin_bp.route('/<int:loan_id>/approve', methods=['PATCH'])
 @jwt_required()
+@admin_required
 def approve_loan(loan_id):
     # Verify admin privileges
-    admin_username = get_jwt_identity()
-    admin = Member.query.filter_by(username=admin_username, is_admin=True).first()
+    current_user_id= get_jwt_identity()
+    admin = Member.query.get(current_user_id)
     if not admin:
         return jsonify({"error": "Admin privileges required"}), 403
 
@@ -31,19 +47,16 @@ def approve_loan(loan_id):
 
     # Process approval/rejection
     if action == 'approve':
-        # Update loan status
         loan.status = 'approved'
         loan.approval_date = datetime.utcnow()
-        loan.approved_by_username = admin_username
+        loan.approved_by = admin.id  
 
-        # Credit member's account
         member_account = Account.query.filter_by(member_id=loan.member_id).first()
         if not member_account:
             return jsonify({"error": "Member account not found"}), 404
 
         member_account.deposit(float(loan.amount))
 
-        # Create transaction record
         transaction = Transaction(
             type="loan_disbursement",
             amount=float(loan.amount),
@@ -52,12 +65,11 @@ def approve_loan(loan_id):
         )
         db.session.add(transaction)
 
-        # Notification message
         notification_message = (
             f"Your loan of {loan.amount} has been approved!\n"
             f"Amount credited: {loan.amount}\n"
             f"New balance: {member_account.balance}\n"
-            f"Due date: {loan.due_date.strftime('%Y-%m-%d')}"
+            f"Term_months: {loan.term_months}"
         )
     else:
         loan.status = 'rejected'
@@ -66,7 +78,6 @@ def approve_loan(loan_id):
             f"Reason: {data.get('reason', 'Not specified')}"
         )
 
-    # Create member notification
     notification = Notification(
         recipient_id=loan.member_id,
         title=f"Loan {action.title()}",
@@ -87,10 +98,10 @@ def approve_loan(loan_id):
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
-
 # repayment management
 @admin_bp.route('/repayments/<int:repayment_id>', methods=['GET', 'DELETE'])
 @jwt_required()
+@admin_required
 def manage_repayment(repayment_id):
     # Admin verification
     current_user = Member.query.filter_by(username=get_jwt_identity()).first()
@@ -137,6 +148,7 @@ def manage_repayment(repayment_id):
 # 5. Admin: Send Notification to Member
 @admin_bp.route('/send', methods=['POST'])
 @jwt_required()
+@admin_required
 def send_notification():
     """Send a notification to a specific member (admin only)"""
     current_user_id = get_jwt_identity()
@@ -170,6 +182,7 @@ def send_notification():
 # 6. Admin: Broadcast Notification
 @admin_bp.route('/broadcast', methods=['POST'])
 @jwt_required()
+@admin_required
 def broadcast_notification():
     """Broadcast notification to all members (admin only)"""
     current_user_id = get_jwt_identity()
@@ -204,8 +217,9 @@ def broadcast_notification():
     }), 201
 
 
-@notification_bp.route('/admin/notifications', methods=['GET'])
+@admin_bp.route('/admin/notifications', methods=['GET'])
 @jwt_required()
+@admin_required
 def get_admin_notifications():
     """Get notifications with admin filters (all users or specific)"""
     # Verify admin privileges

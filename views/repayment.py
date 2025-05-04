@@ -1,4 +1,4 @@
-from models import LoanRepayment,db, Loan
+from models import LoanRepayment,db, Loan, Notification
 from flask import jsonify,request, Blueprint
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -8,11 +8,26 @@ from flask import request
 repayment_bp = Blueprint("repayment_bp", __name__)
 
 
+def create_notification(recipient_id, message, type, loan_id=None, sender_id=None):
+    notif = Notification(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        message=message,
+        type=type,
+        loan_id=loan_id,
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(notif)
+    db.session.commit()
+
+
+# loan repayment
 @repayment_bp.route('/<int:loan_id>/repayments', methods=['POST'])
 @jwt_required()
 def create_repayment(loan_id):
-    # Verify member owns the loan
-    current_user = Member.query.filter_by(username=get_jwt_identity()).first()
+    current_user_id = get_jwt_identity()
+    current_user = Member.query.get(current_user_id)
+    
     loan = Loan.query.get_or_404(loan_id)
     
     if loan.member_id != current_user.id:
