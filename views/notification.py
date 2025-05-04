@@ -6,3 +6,126 @@ from flask import request
 
 
 notification_bp = Blueprint("notification_bp", __name__)
+
+
+# get notification
+@notification_bp.route('/', methods=['GET'])
+@jwt_required()
+def get_user_notifications():
+    """Get paginated notifications for the authenticated user"""
+    current_user_id = get_jwt_identity()
+    
+    # Pagination and filtering
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    unread_only = request.args.get('unread', '').lower() == 'true'
+    notification_type = request.args.get('type')
+    loan_id = request.args.get('loan_id')
+
+    query = Notification.query.filter_by(recipient_id=current_user_id)
+
+    if unread_only:
+        query = query.filter_by(is_read=False)
+    if notification_type:
+        query = query.filter_by(type=notification_type)
+    if loan_id:
+        query = query.filter_by(loan_id=loan_id)
+
+    notifications = query.order_by(desc(Notification.timestamp))\
+                       .paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        "notifications": [{
+            "id": n.id,
+            "title": n.title,
+            "message": n.message,
+            "type": n.type,
+            "is_read": n.is_read,
+            "timestamp": n.timestamp.isoformat(),
+            "loan_id": n.loan_id,
+            "sender": {
+                "username": n.sender.username,
+                "name": f"{n.sender.first_name} {n.sender.last_name}"
+            } if n.sender else None
+        } for n in notifications.items],
+        "meta": {
+            "total": notifications.total,
+            "pages": notifications.pages,
+            "current_page": notifications.page,
+            "unread_count": Notification.query.filter_by(
+                recipient_id=current_user_id,
+                is_read=False
+            ).count()
+        }
+    })
+
+
+# Mark Notification as Read
+@notification_bp.route('/<int:notification_id>/read', methods=['PATCH'])
+@jwt_required()
+def mark_notification_read(notification_id):
+    """Mark a specific notification as read"""
+    current_user_id = get_jwt_identity()
+    notification = Notification.query.get_or_404(notification_id)
+
+    if notification.recipient_id != current_user_id:
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    notification.is_read = True
+    db.session.commit()
+
+    return jsonify({"message": "Notification marked as read"}), 200
+
+
+# Mark All Notifications as Read
+@notification_bp.route('/read-all', methods=['PATCH'])
+@jwt_required()
+def mark_all_notifications_read():
+    """Mark all user notifications as read"""
+    current_user_id = get_jwt_identity()
+    
+    updated_count = Notification.query.filter_by(
+        recipient_id=current_user_id,
+        is_read=False
+    ).update({'is_read': True})
+
+    db.session.commit()
+    return jsonify({
+        "message": f"Marked {updated_count} notifications as read"
+    }), 200
+
+
+# Get Unread Notifications Count
+@notification_bp.route('/unread-count', methods=['GET'])
+@jwt_required()
+def get_unread_count():
+    """Get count of unread notifications"""
+    current_user_id = get_jwt_identity()
+    
+    count = Notification.query.filter_by(
+        recipient_id=current_user_id,
+        is_read=False
+    ).count()
+
+    return jsonify({"count": count}), 200
+
+
+
+# Delete notification
+@notification_bp.route('/<int:notification_id>', methods=['DELETE'])
+@jwt_required()
+def delete_notification(notification_id):
+    """Delete a specific notification"""
+    current_user_id = get_jwt_identity()
+    notification = Notification.query.get_or_404(notification_id)
+
+    # Allow deletion by recipient or admin
+    if notification.recipient_id != current_user_id and not Member.query.get(current_user_id).is_admin:
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    db.session.delete(notification)
+    db.session.commit()
+
+    return jsonify({"message": "Notification deleted successfully"}), 200
+
+

@@ -24,11 +24,24 @@ class Member(db.Model):
 
     # Specify foreign_keys to resolve ambiguity
     loans = db.relationship('Loan', foreign_keys='Loan.member_id', backref='borrower', lazy=True)
-    guaranteed_loans = db.relationship('Loan', foreign_keys='Loan.guarantor_id', backref='guarantor', lazy=True)
-    approved_loans = db.relationship('Loan', foreign_keys='Loan.approved_by', backref='approver', lazy=True)
+    guaranteed_loans = db.relationship(
+        'Loan',
+        foreign_keys='Loan.guarantor_username',
+        primaryjoin='Member.username == Loan.guarantor_username',
+        backref='guarantor_member',
+        lazy=True
+    )
+    approved_loans = db.relationship(
+        'Loan',
+        foreign_keys='Loan.approved_by_username',
+        primaryjoin='Member.username == Loan.approved_by_username',
+        backref='approver_member',
+        lazy=True
+    )
 
     notifications_received = db.relationship('Notification', foreign_keys='Notification.recipient_id', backref='recipient', lazy=True)
-    notifications_sent = db.relationship('Notification', foreign_keys='Notification.sender_id', backref='sender', lazy=True)
+    notifications_sent = db.relationship('Notification', backref='sender', foreign_keys='Notification.sender_id')
+
 
 
     
@@ -73,6 +86,8 @@ class Transaction(db.Model):
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
 
+    loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'))
+
     def __repr__(self):
         return f"<Transaction {self.id} - {self.type} {self.amount}>"
 
@@ -84,20 +99,16 @@ class Loan(db.Model):
     interest_rate = db.Column(db.Numeric(5, 2), default=12.0)
     application_date = db.Column(db.DateTime, default=datetime.utcnow)
     approval_date = db.Column(db.DateTime)
-    due_date = db.Column(db.DateTime)
+    term_months = db.Column(db.Integer, default=6)
     purpose = db.Column(db.String(100), nullable=False )  # e.g., "Business", "Education"
     status = db.Column(db.String(20), default='pending')  # pending/approved/rejected/paid
-    guarantor_id = db.Column(db.Integer, db.ForeignKey('members.id'))
-    approved_by = db.Column(db.Integer, db.ForeignKey('members.id'))
+    guarantor_username = db.Column(db.String(100), db.ForeignKey('members.username'))  # Changed from guarantor_id
+    approved_by_username = db.Column(db.String(100), db.ForeignKey('members.username'))  # Changed from approved_by
 
     repayments = db.relationship('LoanRepayment', backref='loan', lazy=True)
     
 
-    # Updated constraint with explicit name
-    __table_args__ = (
-        CheckConstraint('member_id != guarantor_id', name='loan_guarantor_check'),
-    )
-
+    
 
 class LoanRepayment(db.Model):
     __tablename__ = 'loan_repayments'
@@ -120,6 +131,10 @@ class Notification(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     type = db.Column(db.String(50))  # 'loan_request', 'loan_status_update', 'repayment_notice', etc.
     loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=True)
+
+    # Relationship
+    loan = db.relationship('Loan', backref='notifications')
+    
 
 
 class ProfileUpdateRequest(db.Model):

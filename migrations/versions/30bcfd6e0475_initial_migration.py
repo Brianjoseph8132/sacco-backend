@@ -1,8 +1,8 @@
 """Initial migration.
 
-Revision ID: c50da3fc37a3
+Revision ID: 30bcfd6e0475
 Revises: 
-Create Date: 2025-04-23 11:25:58.626748
+Create Date: 2025-05-04 22:35:14.505471
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'c50da3fc37a3'
+revision = '30bcfd6e0475'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -64,11 +64,10 @@ def upgrade():
     sa.Column('due_date', sa.DateTime(), nullable=True),
     sa.Column('purpose', sa.String(length=100), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
-    sa.Column('guarantor_id', sa.Integer(), nullable=True),
-    sa.Column('approved_by', sa.Integer(), nullable=True),
-    sa.CheckConstraint('member_id != guarantor_id', name='loan_guarantor_check'),
-    sa.ForeignKeyConstraint(['approved_by'], ['members.id'], ),
-    sa.ForeignKeyConstraint(['guarantor_id'], ['members.id'], ),
+    sa.Column('guarantor_username', sa.String(length=100), nullable=True),
+    sa.Column('approved_by_username', sa.String(length=100), nullable=True),
+    sa.ForeignKeyConstraint(['approved_by_username'], ['members.username'], ),
+    sa.ForeignKeyConstraint(['guarantor_username'], ['members.username'], ),
     sa.ForeignKeyConstraint(['member_id'], ['members.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -119,7 +118,9 @@ def upgrade():
     sa.Column('amount', sa.Float(), nullable=False),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.Column('account_id', sa.Integer(), nullable=False),
+    sa.Column('loan_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['account_id'], ['account.id'], ),
+    sa.ForeignKeyConstraint(['loan_id'], ['loans.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###

@@ -35,6 +35,7 @@ app.register_blueprint(repayment_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(account_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(admin_bp)
 
 
 
