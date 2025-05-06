@@ -28,10 +28,12 @@ def create_notification(recipient_id, message, type, loan_id=None, sender_id=Non
 @jwt_required()
 @admin_required
 def approve_loan(loan_id):
+    from datetime import datetime  # just in case
+
     # Verify admin privileges
-    current_user_id= get_jwt_identity()
+    current_user_id = get_jwt_identity()
     admin = Member.query.get(current_user_id)
-    if not admin:
+    if not admin or not admin.is_admin:
         return jsonify({"error": "Admin privileges required"}), 403
 
     # Get loan and validate status
@@ -302,3 +304,43 @@ def get_admin_notifications():
         }
     })
 
+
+
+
+
+@admin_bp.route('/<int:loan_id>', methods=['GET'])
+@jwt_required()
+def get_loan_details(loan_id):
+    """Get detailed loan information including repayment status"""
+    current_user_id = get_jwt_identity()
+    loan = Loan.query.get_or_404(loan_id)
+
+    # Verify ownership or admin status
+    if loan.member_id != current_user_id and not Member.query.get(current_user_id).is_admin:
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    return jsonify({
+        "loan": {
+            "id": loan.id,
+            "amount": float(loan.amount),
+            "purpose": loan.purpose,
+            "status": loan.status,
+            "interest_rate": float(loan.interest_rate),
+            "total_interest": loan.total_interest,
+            "total_amount_due": loan.total_amount_due,
+            "amount_repaid": loan.amount_repaid,
+            "balance_remaining": loan.total_amount_due - loan.amount_repaid,
+            "repayment_progress": f"{loan.repayment_progress:.1f}%",
+            "application_date": loan.application_date.isoformat(),
+            "approval_date": loan.approval_date.isoformat() if loan.approval_date else None,
+            "due_date": loan.due_date.isoformat() if loan.due_date else None,
+            "actual_completion_date": loan.actual_completion_date.isoformat() if loan.actual_completion_date else None
+        },
+        "repayments": [{
+            "id": r.id,
+            "amount": float(r.amount),
+            "date": r.payment_date.isoformat(),
+            "method": r.payment_method,
+            "receipt_number": r.receipt_number
+        } for r in loan.repayments]
+    })

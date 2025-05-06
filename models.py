@@ -2,6 +2,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData, ForeignKey, CheckConstraint
 from datetime import datetime
 from werkzeug.security import generate_password_hash
+from decimal import Decimal
+from sqlalchemy import Numeric, CheckConstraint
 
 metadata = MetaData()
 db = SQLAlchemy(metadata=metadata)
@@ -49,11 +51,10 @@ class Account(db.Model):
     __tablename__ = 'account'
     id = db.Column(db.Integer, primary_key=True)
     member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)
-    balance = db.Column(db.Float, default=0.0, nullable=False)
+    balance = db.Column(Numeric(precision=12, scale=2), default=Decimal('0.00'), nullable=False)
     pin = db.Column(db.String(128), nullable=False)
-    minimum_balance = db.Column(db.Float, default=100.0)  # SACCO policy
+    minimum_balance = db.Column(Numeric(precision=12, scale=2), default=Decimal('100.00'))  # SACCO policy
 
-    # Updated constraint with explicit name
     __table_args__ = (
         CheckConstraint('balance >= minimum_balance', name='account_min_balance_check'),
     )
@@ -62,21 +63,20 @@ class Account(db.Model):
         self.pin = generate_password_hash(pin)
 
     def deposit(self, amount):
-        if isinstance(amount, str):
-            amount = float(amount)
+        amount = Decimal(str(amount))  # convert to Decimal
         self.balance += amount
         transaction = Transaction(type="deposit", amount=amount, account_id=self.id)
         db.session.add(transaction)
 
     def withdraw(self, amount):
-        if isinstance(amount, str):
-            amount = float(amount)
+        amount = Decimal(str(amount))  # convert to Decimal
         self.balance -= amount
         transaction = Transaction(type="withdraw", amount=amount, account_id=self.id)
         db.session.add(transaction)
 
     def __repr__(self):
         return f"<Account {self.id} - Balance: {self.balance}>"
+
 
 class Transaction(db.Model):
     __tablename__ = 'transaction'
@@ -104,9 +104,9 @@ class Loan(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending/approved/rejected/paid
     guarantor_username = db.Column(db.String(100), db.ForeignKey('members.username'))  # Changed from guarantor_id
     approved_by_username = db.Column(db.String(100), db.ForeignKey('members.username'))  # Changed from approved_by
+     
 
     repayments = db.relationship('LoanRepayment', backref='loan', lazy=True)
-    
 
     
 
@@ -117,8 +117,9 @@ class LoanRepayment(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     payment_method = db.Column(db.String(50))  # e.g., "M-Pesa", "Bank Transfer"
-    status = db.Column(db.String(20), default='completed')  # partial/full
+    
 
+    
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
