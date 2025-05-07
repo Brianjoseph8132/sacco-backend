@@ -107,6 +107,7 @@ class Loan(db.Model):
      
 
     repayments = db.relationship('LoanRepayment', backref='loan', lazy=True)
+   
 
     
 

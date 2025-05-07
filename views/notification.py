@@ -3,13 +3,14 @@ from flask import jsonify,request, Blueprint
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask import request
+from sqlalchemy import desc 
 
 
 notification_bp = Blueprint("notification_bp", __name__)
 
 
 # get notification
-@notification_bp.route('/', methods=['GET'])
+@notification_bp.route('/notifications', methods=['GET'])
 @jwt_required()
 def get_user_notifications():
     """Get paginated notifications for the authenticated user"""
@@ -112,7 +113,7 @@ def get_unread_count():
 
 
 # Delete notification
-@notification_bp.route('/<int:notification_id>', methods=['DELETE'])
+@notification_bp.route('/<int:notification_id>/notification', methods=['DELETE'])
 @jwt_required()
 def delete_notification(notification_id):
     """Delete a specific notification"""

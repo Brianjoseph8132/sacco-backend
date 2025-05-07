@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask import request
 from decorator import admin_required
 from datetime import datetime
+from sqlalchemy import desc 
 
 admin_bp = Blueprint("admin_bp", __name__)
 
@@ -106,9 +107,11 @@ def approve_loan(loan_id):
 @admin_required
 def manage_repayment(repayment_id):
     # Admin verification
-    current_user = Member.query.filter_by(username=get_jwt_identity()).first()
-    if not current_user.is_admin:
-        return jsonify({"error": "Admin access required"}), 403
+    current_user_id = get_jwt_identity()
+    current_user = Member.query.get(current_user_id)
+    if not current_user or not current_user.is_admin:
+        return jsonify({"error": "Admin privileges required"}), 403
+
 
     repayment = LoanRepayment.query.get_or_404(repayment_id)
     loan = repayment.loan
@@ -147,7 +150,7 @@ def manage_repayment(repayment_id):
             return jsonify({"error": str(e)}), 500
 
 
-# 5. Admin: Send Notification to Member
+#  Admin: Send Notification to Member
 @admin_bp.route('/send', methods=['POST'])
 @jwt_required()
 @admin_required
@@ -181,7 +184,7 @@ def send_notification():
         "notification_id": notification.id
     }), 201
 
-# 6. Admin: Broadcast Notification
+# Admin: Broadcast Notification
 @admin_bp.route('/broadcast', methods=['POST'])
 @jwt_required()
 @admin_required
@@ -223,7 +226,7 @@ def broadcast_notification():
 @jwt_required()
 @admin_required
 def get_admin_notifications():
-    """Get notifications with admin filters (all users or specific)"""
+    """Get notifications meant for admins only"""
     # Verify admin privileges
     current_user_id = get_jwt_identity()
     admin = Member.query.get(current_user_id)
@@ -233,18 +236,16 @@ def get_admin_notifications():
     # Pagination and filtering
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
-    member_id = request.args.get('member_id')
     notification_type = request.args.get('type')
     is_read = request.args.get('is_read')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
-    # Base query
-    query = Notification.query.join(Member, Notification.recipient_id == Member.id)
+    # Base query: Only notifications where recipient is an admin
+    query = Notification.query.join(Member, Notification.recipient_id == Member.id)\
+                              .filter(Member.is_admin == True)
 
     # Apply filters
-    if member_id:
-        query = query.filter(Notification.recipient_id == member_id)
     if notification_type:
         query = query.filter(Notification.type == notification_type)
     if is_read and is_read.lower() in ['true', 'false']:
@@ -295,7 +296,6 @@ def get_admin_notifications():
             "pages": notifications.pages,
             "current_page": notifications.page,
             "filters": {
-                "member_id": member_id,
                 "type": notification_type,
                 "is_read": is_read,
                 "start_date": start_date,
@@ -308,39 +308,66 @@ def get_admin_notifications():
 
 
 
-@admin_bp.route('/<int:loan_id>', methods=['GET'])
+@admin_bp.route('/loans-repayments', methods=['GET'])
 @jwt_required()
-def get_loan_details(loan_id):
-    """Get detailed loan information including repayment status"""
-    current_user_id = get_jwt_identity()
-    loan = Loan.query.get_or_404(loan_id)
+@admin_required
+def get_loans_with_repayments():
+    # Filters from query params
+    status_filter = request.args.get('status')
+    member_username_filter = request.args.get('member_username')
 
-    # Verify ownership or admin status
-    if loan.member_id != current_user_id and not Member.query.get(current_user_id).is_admin:
-        return jsonify({"error": "Unauthorized access"}), 403
+    # Pagination params
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
 
-    return jsonify({
-        "loan": {
-            "id": loan.id,
-            "amount": float(loan.amount),
+    # Base query
+    query = Loan.query
+
+    # Apply filters
+    if status_filter:
+        query = query.filter(Loan.status == status_filter)
+    if member_username_filter:
+        query = query.filter(Loan.member_id == Member.id)  # Ensure loans belong to a member
+
+    # Paginate
+    loans_pagination = query.order_by(Loan.application_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    loans = loans_pagination.items
+
+    result = []
+    for loan in loans:
+        # Manually access the member's username
+        member = Member.query.get(loan.member_id)  # Manually query the Member model using loan.member_id
+        member_username = member.username if member else "Unknown"  # Get the username
+
+        result.append({
+            "loan_id": loan.id,
+            "member_username": member_username,  # Use the manually fetched username
+            "original_amount": float(loan.amount),
+            "interest_rate": float(loan.interest_rate),
+            "term_months": loan.term_months,
             "purpose": loan.purpose,
             "status": loan.status,
-            "interest_rate": float(loan.interest_rate),
-            "total_interest": loan.total_interest,
-            "total_amount_due": loan.total_amount_due,
-            "amount_repaid": loan.amount_repaid,
-            "balance_remaining": loan.total_amount_due - loan.amount_repaid,
-            "repayment_progress": f"{loan.repayment_progress:.1f}%",
-            "application_date": loan.application_date.isoformat(),
+            "application_date": loan.application_date.isoformat() if loan.application_date else None,
             "approval_date": loan.approval_date.isoformat() if loan.approval_date else None,
-            "due_date": loan.due_date.isoformat() if loan.due_date else None,
-            "actual_completion_date": loan.actual_completion_date.isoformat() if loan.actual_completion_date else None
-        },
-        "repayments": [{
-            "id": r.id,
-            "amount": float(r.amount),
-            "date": r.payment_date.isoformat(),
-            "method": r.payment_method,
-            "receipt_number": r.receipt_number
-        } for r in loan.repayments]
+            "repayments": [{
+                "repayment_id": r.id,
+                "amount": float(r.amount),
+                "payment_date": r.payment_date.isoformat() if r.payment_date else None,
+                "payment_method": r.payment_method
+            } for r in loan.repayments]
+        })
+
+    return jsonify({
+        "loans": result,
+        "meta": {
+            "total": loans_pagination.total,
+            "pages": loans_pagination.pages,
+            "current_page": loans_pagination.page,
+            "per_page": per_page,
+            "filters": {
+                "status": status_filter,
+                "member_username": member_username_filter
+            }
+        }
     })

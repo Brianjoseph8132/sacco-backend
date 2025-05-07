@@ -214,48 +214,6 @@ def get_repayments(loan_id):
 
 
 
-@loan_bp.route('/<int:loan_id>/summary', methods=['GET'])
-@jwt_required()
-def get_loan_summary(loan_id):
-    """Get detailed loan summary including principal, interest and total repayment"""
-    current_user_id = get_jwt_identity()
-    loan = Loan.query.get_or_404(loan_id)
-    
-    # Verify ownership or admin status
-    if loan.member_id != current_user_id and not Member.query.get(current_user_id).is_admin:
-        return jsonify({"error": "Unauthorized access"}), 403
-
-    # Calculate interest and total
-    interest_amount = float(loan.amount) * (loan.interest_rate / 100)
-    total_repayment = float(loan.amount) + interest_amount
-    amount_repaid = sum(float(r.amount) for r in loan.repayments)
-    balance_remaining = total_repayment - amount_repaid
-
-    return jsonify({
-        "loan_summary": {
-            "loan_id": loan.id,
-            "principal_amount": float(loan.amount),
-            "interest_rate": float(loan.interest_rate),
-            "interest_amount": interest_amount,
-            "total_repayment": total_repayment,
-            "amount_repaid": amount_repaid,
-            "balance_remaining": balance_remaining,
-            "repayment_progress": f"{(amount_repaid/total_repayment)*100:.1f}%" if total_repayment > 0 else "0%",
-            "currency": "KES",  # Kenyan Shillings
-            "calculation_formula": "Principal + (Principal × Interest Rate)",
-            "status": loan.status,
-            "due_date": loan.due_date.isoformat() if loan.due_date else None
-        },
-        "repayment_history": [{
-            "date": r.payment_date.isoformat(),
-            "amount": float(r.amount),
-            "method": r.payment_method
-        } for r in loan.repayments]
-    })
-
-    
-    
-
 # {
 #   "amount": 5000,
 #   "purpose": "Business expansion",

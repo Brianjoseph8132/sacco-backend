@@ -105,34 +105,46 @@ def create_repayment(loan_id):
         return jsonify({"error": str(e)}), 500
 
 
-# repayment summary
-@repayment_bp.route('/repayments/summary', methods=['GET'])
+# repayment history
+@repayment_bp.route('/<int:loan_id>/history', methods=['GET'])
 @jwt_required()
-def repayment_summary():
-    current_user = Member.query.filter_by(username=get_jwt_identity()).first()
-    
-    # Get all active loans
-    loans = Loan.query.filter_by(member_id=current_user.id, status='approved').all()
-    
-    summary = []
-    for loan in loans:
-        total_repaid = sum(r.amount for r in loan.repayments)
-        total_due = loan.amount * (1 + loan.interest_rate/100)
-        
-        summary.append({
-            "loan_id": loan.id,
-            "original_amount": float(loan.amount),
-            "total_repaid": float(total_repaid),
-            "balance": float(total_due - total_repaid),
-            "due_date": loan.due_date.isoformat(),
-            "next_payment_due": (  # Simple calculation
-                min(loan.amount/3, total_due - total_repaid) 
-                if total_repaid < total_due else 0
-            )
-        })
-    
-    return jsonify({"summary": summary})
+def repayment_history(loan_id):
+    current_user_id = get_jwt_identity()
+    current_user = Member.query.get(current_user_id)
 
+    loan = Loan.query.get_or_404(loan_id)
+
+    # Only the loan owner can view the history
+    if loan.member_id != current_user.id:
+        return jsonify({"error": "You can only view your own loan history"}), 403
+
+    repayments = LoanRepayment.query.filter_by(loan_id=loan_id).order_by(LoanRepayment.payment_date.asc()).all()
+
+    loan_total_with_interest = loan.amount + loan.amount * (loan.interest_rate / 100)
+
+    history_list = []
+    running_total_paid = Decimal('0.00')
+
+    for r in repayments:
+        running_total_paid += r.amount
+        balance_remaining = loan_total_with_interest - running_total_paid
+
+        history_list.append({
+            "repayment_id": r.id,
+            "amount_paid": float(r.amount),
+            "payment_method": r.payment_method,
+            "payment_date": r.payment_date.strftime('%Y-%m-%d %H:%M:%S'),
+            "total_paid_so_far": float(running_total_paid),
+            "balance_remaining": float(balance_remaining)
+        })
+
+    return jsonify({
+        "loan_id": loan_id,
+        "loan_amount": float(loan.amount),
+        "interest_rate": float(loan.interest_rate),
+        "loan_total_with_interest": float(loan_total_with_interest),
+        "repayments": history_list
+    }), 200
 
 
 
@@ -161,3 +173,36 @@ def check_loan_balance(loan_id):
         "balance": balance,
         "loan_status": loan.status
     }), 200
+
+
+# loans payment summary
+# @repayment_bp.route('/repayment_summary', methods=['GET'])
+# @jwt_required()
+# def repayment_summary():
+#     current_user_id = get_jwt_identity()
+#     current_user = Member.query.get(current_user_id)
+
+#     loans = Loan.query.filter_by(member_id=current_user.id).all()
+
+#     loan_summaries = []
+#     for loan in loans:
+#         total_repaid = db.session.query(db.func.sum(LoanRepayment.amount)).filter_by(loan_id=loan.id).scalar() or 0
+
+#         total_to_repay = float(loan.amount) + float(loan.interest_amount or 0)
+#         balance_remaining = total_to_repay - float(total_repaid)
+
+#         loan_summaries.append({
+#             "loan_id": loan.id,
+#             "original_loan_amount": float(loan.amount),
+#             "interest_amount": float(loan.interest_amount or 0),
+#             "total_to_repay": total_to_repay,
+#             "total_repaid": float(total_repaid),
+#             "balance_remaining": balance_remaining,
+#             "loan_status": loan.status
+#         })
+
+#     return jsonify({
+#         "member_name": current_user.username,
+#         "loan_summaries": loan_summaries
+#     }), 200
+
