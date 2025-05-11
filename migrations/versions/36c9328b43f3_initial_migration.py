@@ -1,8 +1,8 @@
 """Initial migration.
 
-Revision ID: 30bcfd6e0475
+Revision ID: 36c9328b43f3
 Revises: 
-Create Date: 2025-05-04 22:35:14.505471
+Create Date: 2025-05-10 21:47:26.742123
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '30bcfd6e0475'
+revision = '36c9328b43f3'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -25,14 +25,10 @@ def upgrade():
     sa.Column('username', sa.String(length=100), nullable=True),
     sa.Column('email', sa.String(length=100), nullable=False),
     sa.Column('password', sa.String(length=200), nullable=False),
-    sa.Column('phone', sa.String(length=20), nullable=True),
-    sa.Column('id_number', sa.String(length=20), nullable=True),
-    sa.Column('occupation', sa.String(length=100), nullable=True),
     sa.Column('join_date', sa.DateTime(), nullable=True),
     sa.Column('is_admin', sa.Boolean(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email'),
-    sa.UniqueConstraint('id_number'),
     sa.UniqueConstraint('username')
     )
     op.create_table('token_blocklist',
@@ -47,12 +43,16 @@ def upgrade():
     op.create_table('account',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('member_id', sa.Integer(), nullable=False),
-    sa.Column('balance', sa.Float(), nullable=False),
+    sa.Column('balance', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('pin', sa.String(length=128), nullable=False),
-    sa.Column('minimum_balance', sa.Float(), nullable=True),
+    sa.Column('phone', sa.String(length=20), nullable=True),
+    sa.Column('id_number', sa.String(length=20), nullable=True),
+    sa.Column('occupation', sa.String(length=100), nullable=True),
+    sa.Column('minimum_balance', sa.Numeric(precision=12, scale=2), nullable=True),
     sa.CheckConstraint('balance >= minimum_balance', name='account_min_balance_check'),
     sa.ForeignKeyConstraint(['member_id'], ['members.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id_number')
     )
     op.create_table('loans',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -61,7 +61,7 @@ def upgrade():
     sa.Column('interest_rate', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('application_date', sa.DateTime(), nullable=True),
     sa.Column('approval_date', sa.DateTime(), nullable=True),
-    sa.Column('due_date', sa.DateTime(), nullable=True),
+    sa.Column('term_months', sa.Integer(), nullable=True),
     sa.Column('purpose', sa.String(length=100), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
     sa.Column('guarantor_username', sa.String(length=100), nullable=True),
@@ -93,7 +93,6 @@ def upgrade():
     sa.Column('amount', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('payment_date', sa.DateTime(), nullable=True),
     sa.Column('payment_method', sa.String(length=50), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=True),
     sa.ForeignKeyConstraint(['loan_id'], ['loans.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

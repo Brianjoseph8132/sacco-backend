@@ -16,9 +16,6 @@ class Member(db.Model):
     username = db.Column(db.String(100), unique=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    phone = db.Column(db.String(20))
-    id_number = db.Column(db.String(20), unique=True)
-    occupation = db.Column(db.String(100))
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
 
@@ -53,6 +50,9 @@ class Account(db.Model):
     member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)
     balance = db.Column(Numeric(precision=12, scale=2), default=Decimal('0.00'), nullable=False)
     pin = db.Column(db.String(128), nullable=False)
+    phone = db.Column(db.String(20))
+    id_number = db.Column(db.String(20), unique=True)
+    occupation = db.Column(db.String(100))
     minimum_balance = db.Column(Numeric(precision=12, scale=2), default=Decimal('100.00'))  # SACCO policy
 
     __table_args__ = (

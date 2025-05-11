@@ -9,6 +9,7 @@ from sqlalchemy import or_
 
 
 
+
 loan_bp = Blueprint("loan_bp", __name__)
 
 
@@ -84,7 +85,6 @@ def create_loan():
                 f"Username: @{current_member.username}\n"
                 f"Amount: {data['amount']}\n"
                 f"Purpose: {data['purpose']}\n"
-                f"Phone: {current_member.phone}\n"
                 f"Applied: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
             ),
             type="admin_loan_alert",

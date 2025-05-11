@@ -29,9 +29,6 @@ def add_members():
     username = data.get('username')
     email = data.get('email')
     raw_password = data.get('password')
-    phone = data.get('phone')
-    occupation = data.get('occupation')
-    id_number = data.get("id_number")
     is_admin = data.get("is_admin", False)
 
     # Validation for password length before hashing it
@@ -46,13 +43,6 @@ def add_members():
     except EmailNotValidError as e:
         return jsonify({"error": f"Invalid email address: {str(e)}"}), 400
 
-    # Phone validation (Kenyan phone number validation)
-    if not validate_kenyan_phone_number(phone):
-        return jsonify({"error": "Phone number must start with +254 and be followed by 9 digits."}), 400
-
-    # Validation for ID number (should be 9 digits)
-    if not isinstance(id_number, int) or len(str(id_number)) != 9:
-        return jsonify({"error": "ID number should be exactly 9 digits"}), 400
     
     # Check if username or email already exists
     check_username = Member.query.filter_by(username=username).first()
@@ -68,9 +58,6 @@ def add_members():
         username=username,
         email=email,
         password=password,
-        phone=phone, 
-        occupation=occupation,
-        id_number=id_number,
         is_admin=is_admin
     )
     db.session.add(new_member)
