@@ -146,21 +146,6 @@ class Notification(db.Model):
     
 
 
-class ProfileUpdateRequest(db.Model):
-    __tablename__ = 'profile_update_requests'
-    id = db.Column(db.Integer, primary_key=True)
-    member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)
-    new_first_name = db.Column(db.String(50))
-    new_last_name = db.Column(db.String(50))
-    new_username = db.Column(db.String(100))
-    new_email = db.Column(db.String(100))
-    new_phone = db.Column(db.String(20))
-    new_password = db.Column(db.String(200))  # hashed
-    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    approved_by = db.Column(db.Integer, db.ForeignKey('members.id'))  # Admin ID if approved
-
-
 class TokenBlocklist(db.Model):
     __tablename__ = 'token_blocklist'
     id = db.Column(db.Integer, primary_key=True)
