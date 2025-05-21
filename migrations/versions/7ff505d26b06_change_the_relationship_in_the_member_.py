@@ -1,8 +1,8 @@
-"""Initial migration.
+"""change the relationship in the member and the notification.
 
-Revision ID: 36c9328b43f3
+Revision ID: 7ff505d26b06
 Revises: 
-Create Date: 2025-05-10 21:47:26.742123
+Create Date: 2025-05-13 19:16:17.562351
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '36c9328b43f3'
+revision = '7ff505d26b06'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -98,7 +98,7 @@ def upgrade():
     )
     op.create_table('notifications',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('recipient_id', sa.Integer(), nullable=False),
+    sa.Column('recipient_username', sa.String(length=100), nullable=False),
     sa.Column('sender_id', sa.Integer(), nullable=True),
     sa.Column('message', sa.Text(), nullable=False),
     sa.Column('is_read', sa.Boolean(), nullable=True),
@@ -107,7 +107,7 @@ def upgrade():
     sa.Column('type', sa.String(length=50), nullable=True),
     sa.Column('loan_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['loan_id'], ['loans.id'], ),
-    sa.ForeignKeyConstraint(['recipient_id'], ['members.id'], ),
+    sa.ForeignKeyConstraint(['recipient_username'], ['members.username'], ),
     sa.ForeignKeyConstraint(['sender_id'], ['members.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

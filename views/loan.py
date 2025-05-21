@@ -14,9 +14,9 @@ loan_bp = Blueprint("loan_bp", __name__)
 
 
 
-def create_notification(recipient_id, message, type, loan_id=None, sender_id=None):
+def create_notification(recipient_username, message, type, loan_id=None, sender_id=None):
     notif = Notification(
-        recipient_id=recipient_id,
+        recipient_username=recipient_username,
         sender_id=sender_id,
         message=message,
         type=type,
@@ -66,7 +66,7 @@ def create_loan():
 
     # Notification for applicant
     member_notification = Notification(
-        recipient_id=current_member.id,
+        recipient_username=current_member.id,
         title="Loan Application Submitted",
         message=f"Your loan request of {data['amount']} is under review",
         type="loan_application",
@@ -78,7 +78,7 @@ def create_loan():
     admins = Member.query.filter_by(is_admin=True).all()
     for admin in admins:
         admin_notification = Notification(
-            recipient_id=admin.id,
+            recipient_username=admin.id,
             title="New Loan Application",
             message=(
                 f"Member: {current_member.first_name} {current_member.last_name}\n"
@@ -95,7 +95,7 @@ def create_loan():
     try:
         db.session.commit()
         return jsonify({
-            "message": "Loan application submitted",
+            "success": "Loan application submitted",
             "loan_id": new_loan.id,
             "notifications_sent": len(admins) + 1  # Count of admins + applicant
         }), 201
@@ -135,7 +135,8 @@ def loan_history():
             "status": loan.status,
             "application_date": loan.application_date.isoformat(),
             "approval_date": loan.approval_date.isoformat() if loan.approval_date else None,
-            "term_months": loan.term_months,  
+            "term_months": loan.term_months, 
+            "interest_rate": loan.interest_rate,
             "repayments": [],
             "notifications": []
         }
@@ -181,8 +182,8 @@ def loan_history():
 @loan_bp.route('/<int:loan_id>/repayments', methods=['GET'])
 @jwt_required()
 def get_repayments(loan_id):
-    # Verify access
-    current_user = Member.query.filter_by(username=get_jwt_identity()).first()
+    current_user_id = get_jwt_identity()
+    member = Member.query.get(current_user_id)
     loan = Loan.query.get_or_404(loan_id)
     
     if loan.member_id != current_user.id and not current_user.is_admin:
@@ -209,6 +210,46 @@ def get_repayments(loan_id):
             "pages": repayments.pages,
             "current_page": repayments.page
         }
+    })
+
+
+@loan_bp.route('/check-loan-status/<int:loan_id>', methods=['GET'])
+@jwt_required()
+def check_loan_payment_status(loan_id):
+    # Get authenticated member
+    current_user_id = get_jwt_identity()
+    member = Member.query.get(current_user_id)
+    if not member:
+        return jsonify({"message": "Member not found"}), 404
+
+    # Fetch the loan
+    loan = Loan.query.get(loan_id)
+    if not loan:
+        return jsonify({"message": "Loan not found"}), 404
+
+    # Ensure the loan belongs to the authenticated member
+    if loan.member_id != member.id:
+        return jsonify({"message": "You are not authorized to view this loan"}), 403
+
+    # Calculate total repayment amount
+    total_repaid = sum([float(r.amount) for r in loan.repayments])
+
+    # Calculate total payable (loan amount + interest)
+    loan_amount = float(loan.amount)
+    interest_amount = loan_amount * (float(loan.interest_rate) / 100)
+    total_payable = loan_amount + interest_amount
+
+    # Check if loan is fully paid
+    is_fully_paid = total_repaid >= total_payable
+
+    return jsonify({
+        "loan_id": loan.id,
+        "member_id": loan.member_id,
+        "original_amount": loan_amount,
+        "interest_rate": float(loan.interest_rate),
+        "total_payable": round(total_payable, 2),
+        "total_repaid": round(total_repaid, 2),
+        "is_fully_paid": is_fully_paid  
     })
 
 

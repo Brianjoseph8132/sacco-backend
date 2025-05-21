@@ -38,7 +38,14 @@ class Member(db.Model):
         lazy=True
     )
 
-    notifications_received = db.relationship('Notification', foreign_keys='Notification.recipient_id', backref='recipient', lazy=True)
+    notifications_received = db.relationship(
+        'Notification',
+        foreign_keys='Notification.recipient_username',
+        primaryjoin='Member.username == Notification.recipient_username',
+        backref='recipient',
+        lazy=True
+    )
+
     notifications_sent = db.relationship('Notification', backref='sender', foreign_keys='Notification.sender_id')
 
 
@@ -125,7 +132,7 @@ class LoanRepayment(db.Model):
 class Notification(db.Model):
     __tablename__ = 'notifications'
     id = db.Column(db.Integer, primary_key=True)
-    recipient_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)
+    recipient_username = db.Column(db.String(100), db.ForeignKey('members.username'), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=True)
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)

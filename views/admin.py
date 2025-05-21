@@ -11,9 +11,9 @@ admin_bp = Blueprint("admin_bp", __name__)
 
 
 
-def create_notification(recipient_id, message, type, loan_id=None, sender_id=None):
+def create_notification(recipient_username, message, type, loan_id=None, sender_id=None):
     notif = Notification(
-        recipient_id=recipient_id,
+        recipient_username=recipient_username,
         sender_id=sender_id,
         message=message,
         type=type,
@@ -25,12 +25,11 @@ def create_notification(recipient_id, message, type, loan_id=None, sender_id=Non
 
 
 
-@admin_bp.route('/<int:loan_id>/approve', methods=['PATCH'])
+@admin_bp.route('/approve/<int:loan_id>', methods=['PATCH'])
 @jwt_required()
 @admin_required
 def approve_loan(loan_id):
-    from datetime import datetime  # just in case
-
+    
     # Verify admin privileges
     current_user_id = get_jwt_identity()
     admin = Member.query.get(current_user_id)
@@ -82,7 +81,7 @@ def approve_loan(loan_id):
         )
 
     notification = Notification(
-        recipient_id=loan.member_id,
+        recipient_username = loan.borrower.username,
         title=f"Loan {action.title()}",
         message=notification_message,
         type=f"loan_{action}",
@@ -93,7 +92,7 @@ def approve_loan(loan_id):
     try:
         db.session.commit()
         return jsonify({
-            "message": f"Loan {action} successfully",
+            "success": f"Loan {action} successfully",
             "new_balance": member_account.balance if action == 'approve' else None
         }), 200
     except Exception as e:
@@ -163,12 +162,12 @@ def send_notification():
         return jsonify({"error": "Admin access required"}), 403
 
     data = request.get_json()
-    required_fields = ['recipient_id', 'title', 'message', 'type']
+    required_fields = ['recipient_username', 'title', 'message', 'type']
     if not all(field in data for field in required_fields):
         return jsonify({"error": f"Missing required fields: {', '.join(required_fields)}"}), 400
 
     notification = Notification(
-        recipient_id=data['recipient_id'],
+        recipient_username=data['recipient_username'],
         sender_id=current_user_id,
         title=data['title'],
         message=data['message'],
@@ -180,9 +179,11 @@ def send_notification():
     db.session.commit()
 
     return jsonify({
-        "message": "Notification sent successfully",
+        "success": "Notification sent successfully",
         "notification_id": notification.id
     }), 201
+
+
 
 # Admin: Broadcast Notification
 @admin_bp.route('/broadcast', methods=['POST'])
@@ -206,7 +207,7 @@ def broadcast_notification():
     
     for member in members:
         notifications.append(Notification(
-            recipient_id=member.id,
+            recipient_username=member.id,
             sender_id=current_user_id,
             title=data['title'],
             message=data['message'],
@@ -218,7 +219,7 @@ def broadcast_notification():
     db.session.commit()
 
     return jsonify({
-        "message": f"Notification broadcasted to {len(members)} members"
+        "success": f"Notification broadcasted to {len(members)} members"
     }), 201
 
 
@@ -242,7 +243,7 @@ def get_admin_notifications():
     end_date = request.args.get('end_date')
 
     # Base query: Only notifications where recipient is an admin
-    query = Notification.query.join(Member, Notification.recipient_id == Member.id)\
+    query = Notification.query.join(Member, Notification.recipient_username == Member.id)\
                               .filter(Member.is_admin == True)
 
     # Apply filters
@@ -280,11 +281,12 @@ def get_admin_notifications():
             "is_read": n.is_read,
             "timestamp": n.timestamp.isoformat(),
             "loan_id": n.loan_id,
+            "loan_status": n.loan.status if n.loan else None,
             "recipient": {
                 "id": n.recipient.id,
                 "username": n.recipient.username,
                 "name": f"{n.recipient.first_name} {n.recipient.last_name}"
-            },
+            } if n.recipient else None,
             "sender": {
                 "id": n.sender.id,
                 "username": n.sender.username,
@@ -327,29 +329,38 @@ def get_loans_with_repayments():
     if status_filter:
         query = query.filter(Loan.status == status_filter)
     if member_username_filter:
-        query = query.filter(Loan.member_id == Member.id)  # Ensure loans belong to a member
+        query = query.join(Member).filter(Member.username.ilike(f"%{member_username_filter}%"))
 
     # Paginate
     loans_pagination = query.order_by(Loan.application_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
-
     loans = loans_pagination.items
 
     result = []
     for loan in loans:
         # Manually access the member's username
-        member = Member.query.get(loan.member_id)  # Manually query the Member model using loan.member_id
-        member_username = member.username if member else "Unknown"  # Get the username
+        member = Member.query.get(loan.member_id)
+        member_username = member.username if member else "Unknown"
+
+        # Calculate totals
+        loan_amount = float(loan.amount)
+        interest = loan_amount * (float(loan.interest_rate) / 100)
+        total_due = loan_amount + interest
+        total_repaid = sum(float(r.amount) for r in loan.repayments)
+        remaining_balance = max(total_due - total_repaid, 0)
 
         result.append({
             "loan_id": loan.id,
-            "member_username": member_username,  # Use the manually fetched username
-            "original_amount": float(loan.amount),
+            "member_username": member_username,
+            "original_amount": loan_amount,
             "interest_rate": float(loan.interest_rate),
             "term_months": loan.term_months,
             "purpose": loan.purpose,
             "status": loan.status,
             "application_date": loan.application_date.isoformat() if loan.application_date else None,
             "approval_date": loan.approval_date.isoformat() if loan.approval_date else None,
+            "total_due": round(total_due, 2),
+            "total_repaid": round(total_repaid, 2),
+            "remaining_balance": round(remaining_balance, 2),
             "repayments": [{
                 "repayment_id": r.id,
                 "amount": float(r.amount),
@@ -371,3 +382,37 @@ def get_loans_with_repayments():
             }
         }
     })
+
+
+
+# fetching all members
+@admin_bp.route('/members', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_all_members():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    pagination = Member.query.paginate(page=page, per_page=per_page, error_out=False)
+    members = []
+
+    for member in pagination.items:
+        account = member.account  # Access the related account
+        members.append({
+            'id': member.id,
+            'username': member.username,
+            'email': member.email,
+            'first_name': member.first_name,
+            'last_name': member.last_name,
+            'join_date': member.join_date.strftime('%Y-%m-%d'),
+            'phone': account.phone if account else None,
+            'occupation': account.occupation if account else None,
+            'id_number': account.id_number if account else None
+        })
+
+    return jsonify({
+        'members': members,
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': pagination.page
+    }), 200

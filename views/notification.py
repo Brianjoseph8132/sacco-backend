@@ -1,4 +1,4 @@
-from models import Notification,db
+from models import Notification,db,Member
 from flask import jsonify,request, Blueprint
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -23,7 +23,7 @@ def get_user_notifications():
     notification_type = request.args.get('type')
     loan_id = request.args.get('loan_id')
 
-    query = Notification.query.filter_by(recipient_id=current_user_id)
+    query = Notification.query.filter_by(recipient_username=current_user_id)
 
     if unread_only:
         query = query.filter_by(is_read=False)
@@ -54,7 +54,7 @@ def get_user_notifications():
             "pages": notifications.pages,
             "current_page": notifications.page,
             "unread_count": Notification.query.filter_by(
-                recipient_id=current_user_id,
+                recipient_username=current_user_id,
                 is_read=False
             ).count()
         }
@@ -62,20 +62,20 @@ def get_user_notifications():
 
 
 # Mark Notification as Read
-@notification_bp.route('/<int:notification_id>/read', methods=['PATCH'])
+@notification_bp.route('/read/<int:notification_id>', methods=['PATCH'])
 @jwt_required()
 def mark_notification_read(notification_id):
     """Mark a specific notification as read"""
     current_user_id = get_jwt_identity()
-    notification = Notification.query.get_or_404(notification_id)
+    notification = Notification.query.get(notification_id)
 
-    if notification.recipient_id != current_user_id:
-        return jsonify({"error": "Unauthorized access"}), 403
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
 
     notification.is_read = True
     db.session.commit()
 
-    return jsonify({"message": "Notification marked as read"}), 200
+    return jsonify({"success": "Notification marked as read"}), 200
 
 
 # Mark All Notifications as Read
@@ -86,13 +86,13 @@ def mark_all_notifications_read():
     current_user_id = get_jwt_identity()
     
     updated_count = Notification.query.filter_by(
-        recipient_id=current_user_id,
+        recipient_username=current_user_id,
         is_read=False
     ).update({'is_read': True})
 
     db.session.commit()
     return jsonify({
-        "message": f"Marked {updated_count} notifications as read"
+        "success": f"Marked {updated_count} notifications as read"
     }), 200
 
 
@@ -104,7 +104,7 @@ def get_unread_count():
     current_user_id = get_jwt_identity()
     
     count = Notification.query.filter_by(
-        recipient_id=current_user_id,
+        recipient_username=current_user_id,
         is_read=False
     ).count()
 
@@ -113,20 +113,19 @@ def get_unread_count():
 
 
 # Delete notification
-@notification_bp.route('/<int:notification_id>/notification', methods=['DELETE'])
+@notification_bp.route('/notification/<int:notification_id>', methods=['DELETE'])
 @jwt_required()
 def delete_notification(notification_id):
     """Delete a specific notification"""
     current_user_id = get_jwt_identity()
-    notification = Notification.query.get_or_404(notification_id)
+    notification = Notification.query.get(notification_id)
 
-    # Allow deletion by recipient or admin
-    if notification.recipient_id != current_user_id and not Member.query.get(current_user_id).is_admin:
-        return jsonify({"error": "Unauthorized access"}), 403
+    if not notification:
+        return jsonify({'message': 'Notification not found'}), 404
 
     db.session.delete(notification)
     db.session.commit()
 
-    return jsonify({"message": "Notification deleted successfully"}), 200
+    return jsonify({"success": "Notification deleted successfully"}), 200
 
 

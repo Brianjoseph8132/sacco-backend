@@ -21,11 +21,12 @@ def login():
 
     if member and check_password_hash(member.password, password):
         access_token = create_access_token(identity=member.id)
-        return jsonify({"access_token": access_token}), 200
-
-
+        return jsonify({
+            "access_token": access_token,
+            "is_admin": member.is_admin
+        }), 200
     else:
-        return jsonify({"error":"Either email/password is incorrect"}), 404
+        return jsonify({"error": "Either email/password is incorrect"}), 404
 
 
 # Current User
@@ -37,7 +38,8 @@ def current_user():
     member_data ={
             'id':member.id,
             'email':member.email,
-            'username':member.username
+            'username':member.username,
+            'is_admin':member.is_admin
         }
 
     return jsonify(member_data)
